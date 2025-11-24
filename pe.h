@@ -173,8 +173,8 @@ DWORD align(DWORD cbSection, DWORD step) {
     return cbSection % step == 0 ? cbSection : (cbSection / step + 1) * step;
 }
 
-// Find a section header where a given virtual address resides and return it in raw address
-PIMAGE_SECTION_HEADER FindSectionHeaderRaByVa(LPBYTE lpPe, DWORD dwVa)
+// Find a section header where a given virtual address resides and return virtual memory address
+PIMAGE_SECTION_HEADER FindSectionHeaderMaByVa(LPBYTE lpPe, DWORD dwVa)
 {
     // Read headers
     PIMAGE_SECTION_HEADER aSecHeaders;
@@ -188,50 +188,33 @@ PIMAGE_SECTION_HEADER FindSectionHeaderRaByVa(LPBYTE lpPe, DWORD dwVa)
     return nullptr;
 }
 
-// Find a section header where a given raw address resides and return it in raw address
-PIMAGE_SECTION_HEADER FindSectionHeaderRaByRa(LPBYTE lpPe, LPBYTE lpRa)
+// Find a section header where a given raw address resides and return virtual memory address
+PIMAGE_SECTION_HEADER FindSectionHeaderMaByRa(LPBYTE lpPe, DWORD dwRa)
 {
     // Read headers
     PIMAGE_SECTION_HEADER aSecHeaders;
     GetPeHeaders(lpPe, NULL, NULL, NULL, NULL, &aSecHeaders);
 
     for (PIMAGE_SECTION_HEADER p = aSecHeaders; *(p->Name); p++) {
-        if (p->PointerToRawData <= lpRa - lpPe and lpRa - lpPe < p->PointerToRawData + p->SizeOfRawData) {
+        if (p->PointerToRawData <= dwRa and dwRa < p->PointerToRawData + p->SizeOfRawData) {
             return p;
         }
     }
     return nullptr;
 }
 
-// Convert virtual address to relative raw address
-DWORD Va2Rra(LPBYTE lpPe, DWORD dwVa)
+// Convert virtual address to raw address
+DWORD Va2Ra(LPBYTE lpPe, DWORD dwVa)
 {
-    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderRaByVa(lpPe, dwVa);
+    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByVa(lpPe, dwVa);
     return pHeader->PointerToRawData + dwVa - pHeader->VirtualAddress;
 }
 
-// Convert virtual address to raw address
-LPBYTE Va2Ra(LPBYTE lpPe, DWORD dwVa)
-{
-    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderRaByVa(lpPe, dwVa);
-    if (pHeader == 0) return 0;
-    return lpPe + pHeader->PointerToRawData + dwVa - pHeader->VirtualAddress;
-}
-
 // Convert raw address to relative virtual address
-DWORD Ra2Va(LPBYTE lpPe, LPBYTE lpRa)
+DWORD Ra2Va(LPBYTE lpPe, DWORD dwRa)
 {
-    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderRaByRa(lpPe, lpRa);
-    return pHeader->VirtualAddress + (lpRa - lpPe) - pHeader->PointerToRawData;
-}
-
-// Convert raw address to virtual memory address
-ULONGLONG Ra2Ma(LPBYTE lpPe, LPBYTE lpRa)
-{
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, NULL);
-
-    return pOptHeader->ImageBase + Ra2Va(lpPe, lpRa);
+    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByRa(lpPe, dwRa);
+    return pHeader->VirtualAddress + dwRa - pHeader->PointerToRawData;
 }
 
 PIMAGE_SECTION_HEADER GetAvailableSectionHeaderEntry(PIMAGE_SECTION_HEADER pSecHeaders) {
@@ -241,7 +224,7 @@ PIMAGE_SECTION_HEADER GetAvailableSectionHeaderEntry(PIMAGE_SECTION_HEADER pSecH
     return p;
 }
 
-PIMAGE_SECTION_HEADER GetSectionHeaderPointerByName(PIMAGE_SECTION_HEADER pSecHeaders, LPCSTR sSectionName) {
+PIMAGE_SECTION_HEADER GetSectionHeaderMaByName(PIMAGE_SECTION_HEADER pSecHeaders, LPCSTR sSectionName) {
     for (PIMAGE_SECTION_HEADER p = pSecHeaders; *(p->Name); p++) {
         if (strcmp((char*)p->Name, sSectionName) == 0) {
             return p;
@@ -296,13 +279,13 @@ DWORD AddSection(HANDLE  hPE      /* Handle to the heap */
 }
 
 // Get the entry point address in raw address
-LPBYTE GetEntryPointRa(LPBYTE lpPe, LPDWORD lpSize)
+DWORD GetEntryPointRa(LPBYTE lpPe, LPDWORD lpSize)
 {
     // Read headers
     PIMAGE_OPTIONAL_HEADER64 pOptHeader;
     GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, NULL);
 
-    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderRaByVa(lpPe, pOptHeader->AddressOfEntryPoint);
+    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByVa(lpPe, pOptHeader->AddressOfEntryPoint);
     if (pHeader == 0) {
         return 0;
     }
@@ -312,16 +295,37 @@ LPBYTE GetEntryPointRa(LPBYTE lpPe, LPDWORD lpSize)
     return Va2Ra(lpPe, pOptHeader->AddressOfEntryPoint);
 }
 
-
-
-
-
-PIMAGE_IMPORT_DESCRIPTOR GetImportDirectoryTable(LPBYTE lpPe, PIMAGE_OPTIONAL_HEADER64 pOptHeader, LONG lpad = 0)
+DWORD GetDataDirectoryVa(LPBYTE lpPe, DWORD dwDirIdx)
 {
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
+    GetPeHeaders(lpPe, 0, 0, 0, &pOptHeader, 0);
+
+    DWORD dwVa = pOptHeader->DataDirectory[dwDirIdx].VirtualAddress;
+
+    return dwVa;
+}
+
+DWORD GetDataDirectoryRa(LPBYTE lpPe, DWORD dwDirIdx)
+{
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
+    GetPeHeaders(lpPe, 0, 0, 0, &pOptHeader, 0);
+
+    DWORD dwVa = pOptHeader->DataDirectory[dwDirIdx].VirtualAddress;
+
+    return Va2Ra(lpPe, pOptHeader->DataDirectory[dwDirIdx].VirtualAddress);
+}
+
+// CAUTION: Deprecated
+PIMAGE_IMPORT_DESCRIPTOR GetImportDirectoryTable(LPBYTE lpPe, LONG lpad = 0)
+{
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
+    GetPeHeaders(lpPe, 0, 0, 0, &pOptHeader, 0);
+
     PIMAGE_IMPORT_DESCRIPTOR pIDT = (PIMAGE_IMPORT_DESCRIPTOR)(lpPe + pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress - lpad);
     return pIDT;
 }
 
+// CAUTION: Deprecated
 PIMAGE_IMPORT_DESCRIPTOR GetImportDescriptorByDLLName(PIMAGE_IMPORT_DESCRIPTOR pIDT, LPCSTR szName) {
     PIMAGE_IMPORT_DESCRIPTOR pd = pIDT;
 
@@ -334,40 +338,46 @@ PIMAGE_IMPORT_DESCRIPTOR GetImportDescriptorByDLLName(PIMAGE_IMPORT_DESCRIPTOR p
     return nullptr;
 }
 
-/**
- * Read IAT of an imported DLL in a map
- * Import Address Table (IAT) contains addresses of functions.
- * To determine whose address each is, we need to read Import Lookup Table (ILT),
- * solve and seek for a name and calculate the offset from the first thunk.
- * As this offset is common with IAT and ILT, we can successfully correlate
- * a function name and its address
- */
+// https://0xrick.github.io/win-internals/pe6/
 std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>
-ReadImportAddressTable(
+ReadImportLookupTableFromFile(
     LPBYTE lpPe
 ) {
+    // Read these headers
     PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    GetPeHeaders(lpPe, 0, 0, 0, &pOptHeader, 0);
+    PIMAGE_SECTION_HEADER aSecHeaders;
+    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, &aSecHeaders);
 
-    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpPe, pOptHeader);
+    PIMAGE_IMPORT_DESCRIPTOR pIdt = (PIMAGE_IMPORT_DESCRIPTOR)(lpPe + GetDataDirectoryRa(lpPe, IMAGE_DIRECTORY_ENTRY_IMPORT));
+    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
 
-    // PIMAGE_IMPORT_DESCRIPTOR pd = GetImportDescriptorByDLLName(pIdt, szName);
+    // PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpPe, ipad);
+
+    //DWORD dwDirVa = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    //// Find which section contains the address of the import directory
+    //PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByVa(lpPe, dwDirVa);
+    //if (not pHeader) {
+    //    return std::map<std::string, std::map<std::string, ULONGLONG>>();
+    //}
+    //// FIXME: We assume SectionAlignment was 0x1000 here
+    //LONG ipad = 0x1000;
+    //ipad = pHeader->VirtualAddress - pHeader->PointerToRawData;
 
     // Result
-    std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>> mIat;
+    std::map<std::string, std::map<std::string, ULONGLONG>> table;
 
     // Iterate through DLLs
-    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
     while (pd->OriginalFirstThunk) {
-        LPSTR szDllName = (LPSTR)(lpPe + pd->Name);
+        LPSTR szDllName = (LPSTR)(lpPe + Va2Ra(lpPe, pd->Name));
 
-        mIat[szDllName] = std::map<std::string, ULONGLONG>();
+        table[szDllName] = std::map<std::string, ULONGLONG>();
 
-        PIMAGE_THUNK_DATA64 pIlt = (PIMAGE_THUNK_DATA64)(lpPe + pd->OriginalFirstThunk);
-        PIMAGE_THUNK_DATA64 pIat = (PIMAGE_THUNK_DATA64)(lpPe + pd->FirstThunk);
+        PIMAGE_THUNK_DATA64 pIlt = (PIMAGE_THUNK_DATA64)(lpPe + Va2Ra(lpPe, pd->OriginalFirstThunk));
+        PIMAGE_THUNK_DATA64 pIat = (PIMAGE_THUNK_DATA64)(lpPe + Va2Ra(lpPe, pd->FirstThunk));
 
         // Iterate through functions
         while (pIlt->u1.AddressOfData and pIat->u1.AddressOfData) {
+            // NOTICE: The contents of IAT are just same as ILT in a raw data
             ULONGLONG lpFunctionAddr = pIat->u1.AddressOfData;
 
             // std::cout << "Ordinal: " << std::bitset<64>(pIlt->u1.Ordinal) << std::endl;
@@ -375,16 +385,17 @@ ReadImportAddressTable(
             if (pIlt->u1.Ordinal >> 63 == 1) {
                 DWORD dwOrdinal = pIlt->u1.Ordinal & 0xffff;
                 // std::cout << "  Ordinal_" << dwOrdinal << std::endl;
-                mIat[szDllName]["Ordinal_" + std::to_string(dwOrdinal)] = lpFunctionAddr;
+                table[szDllName]["Ordinal_" + std::to_string(dwOrdinal)] = lpFunctionAddr;
 
                 pIlt++;
                 pIat++;
                 continue;
             }
 
-            LPCSTR szFunctionName = ((PIMAGE_IMPORT_BY_NAME)(lpPe + pIlt->u1.AddressOfData))->Name;
+            LPCSTR szFunctionName = ((PIMAGE_IMPORT_BY_NAME)(lpPe + Va2Ra(lpPe, pIlt->u1.AddressOfData)))->Name;
+            // std::cout << "  " << szFunctionName << std::endl;
 
-            mIat[szDllName][szFunctionName] = lpFunctionAddr;
+            table[szDllName][szFunctionName] = lpFunctionAddr;
 
             pIlt++;
             pIat++;
@@ -393,25 +404,84 @@ ReadImportAddressTable(
         pd++;
     }
 
-    return mIat;
+    return table;
 }
 
+/**
+ * Not sure if this works or not
+ * Read ILT in a process
+ * Import Lookup Table (ILT) contains virtual addresses of functions
+ */
 std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>
-ReadRemoteImportAddressTable(
-    HANDLE hProcess,
-    LPBYTE lpImage,
-    LPBYTE lpBuf)
-{
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    GetPeHeaders(lpBuf, 0, 0, 0, &pOptHeader, 0);
-
-    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpBuf, pOptHeader);
+ReadImportLookupTableFromProc(
+    LPBYTE lpBuf
+) {
+    PIMAGE_IMPORT_DESCRIPTOR pIdt = (PIMAGE_IMPORT_DESCRIPTOR)(lpBuf + GetDataDirectoryVa(lpBuf, IMAGE_DIRECTORY_ENTRY_IMPORT));
+    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
 
     // Result
     std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>> table;
 
     // Iterate through DLLs
-    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
+    while (pd->OriginalFirstThunk) {
+        LPSTR szDllName = (LPSTR)(lpBuf + pd->Name);
+
+        table[szDllName] = std::map<std::string, ULONGLONG>();
+
+        PIMAGE_THUNK_DATA64 pIlt = (PIMAGE_THUNK_DATA64)(lpBuf + pd->OriginalFirstThunk);
+        PIMAGE_THUNK_DATA64 pIat = (PIMAGE_THUNK_DATA64)(lpBuf + pd->FirstThunk);
+
+        // Iterate through functions
+        while (pIlt->u1.AddressOfData and pIat->u1.AddressOfData) {
+            ULONGLONG lpFunctionAddr = pIat->u1.AddressOfData;
+
+            // Use ordinal
+            if (pIlt->u1.Ordinal >> 63 == 1) {
+                DWORD dwOrdinal = pIlt->u1.Ordinal & 0xffff;
+                // std::cout << "  Ordinal_" << dwOrdinal << std::endl;
+                table[szDllName]["Ordinal_" + std::to_string(dwOrdinal)] = lpFunctionAddr;
+
+                pIlt++;
+                pIat++;
+                continue;
+            }
+
+            LPCSTR szFunctionName = ((PIMAGE_IMPORT_BY_NAME)(lpBuf + pIlt->u1.AddressOfData))->Name;
+
+            table[szDllName][szFunctionName] = lpFunctionAddr;
+
+            pIlt++;
+            pIat++;
+        }
+
+        pd++;
+    }
+
+    return table;
+}
+
+/**
+ * Read IAT of an imported DLL in a map
+ * Import Address Table(IAT) contains addresses of functions.
+ * To determine whose address each is, we need to read Import Lookup Table(ILT),
+ * solve and seek for a name and calculate the offset from the first thunk.
+ * As this offset is common with IAT and ILT, we can successfully correlate
+ * a function name and its address
+ */
+std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>
+ReadRemoteImportAddressTable(
+    /* HANDLE hProcess, LPBYTE lpProc */
+    LPBYTE lpBuf
+) {
+    // TODO: Copy lpProc to lpBuf here
+
+    PIMAGE_IMPORT_DESCRIPTOR pIdt = (PIMAGE_IMPORT_DESCRIPTOR)(lpBuf + GetDataDirectoryVa(lpBuf, IMAGE_DIRECTORY_ENTRY_IMPORT));
+    PIMAGE_IMPORT_DESCRIPTOR pd   = pIdt;
+
+    // Result
+    std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>> table;
+
+    // Iterate through DLLs
     while (pd->OriginalFirstThunk) {
         LPSTR szDllName = (LPSTR)(lpBuf + pd->Name);
 
@@ -447,86 +517,6 @@ ReadRemoteImportAddressTable(
     return table;
 }
 
-// https://0xrick.github.io/win-internals/pe6/
-std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>
-ReadImportLookupTableFromRaw(
-    LPBYTE lpPe
-) {
-    // Read these headers
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    PIMAGE_SECTION_HEADER aSecHeaders;
-    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, &aSecHeaders);
-
-    DWORD dwDirVa = pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
-    // Find which section contains the address of the import directory
-    PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderRaByVa(lpPe, dwDirVa);
-    if (not pHeader) {
-        return std::map<std::string, std::map<std::string, ULONGLONG>>();
-    }
-    // FIXME: We assume SectionAlignment was 0x1000 here
-    LONG ipad = 0x1000;
-    ipad = pHeader->VirtualAddress - pHeader->PointerToRawData;
-
-    //PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderPointerByName(aSecHeaders, ".text");
-    //if (pTextHeader) {
-    //  ipad = pTextHeader->VirtualAddress - pTextHeader->PointerToRawData;
-    //}
-    //PIMAGE_SECTION_HEADER pRdataHeader = GetSectionHeaderPointerByName(aSecHeaders, ".rdata");
-    //if (pRdataHeader) {
-    //  ipad = pRdataHeader->VirtualAddress - pRdataHeader->PointerToRawData;
-    //}
-    //PIMAGE_SECTION_HEADER pIdataHeader = GetSectionHeaderPointerByName(aSecHeaders, ".idata");
-    //if (pIdataHeader) {
-    //  ipad = pIdataHeader->VirtualAddress - pIdataHeader->PointerToRawData;
-    //}
-
-    // Result
-    std::map<std::string, std::map<std::string, ULONGLONG>> table;
-
-    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpPe, pOptHeader, ipad);
-
-    // Iterate through DLLs
-    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
-    while (pd->OriginalFirstThunk) {
-        LPSTR szDllName = (LPSTR)(lpPe + pd->Name - ipad);
-
-        table[szDllName] = std::map<std::string, ULONGLONG>();
-
-        PIMAGE_THUNK_DATA64 pIlt = (PIMAGE_THUNK_DATA64)(lpPe + pd->OriginalFirstThunk - ipad);
-        PIMAGE_THUNK_DATA64 pIat = (PIMAGE_THUNK_DATA64)(lpPe + pd->FirstThunk - ipad);
-
-        // Iterate through functions
-        while (pIlt->u1.AddressOfData and pIat->u1.AddressOfData) {
-            // NOTICE: The contents of IAT are just same as ILT in a raw data
-            ULONGLONG lpFunctionAddr = pIat->u1.AddressOfData;
-
-            // std::cout << "Ordinal: " << std::bitset<64>(pIlt->u1.Ordinal) << std::endl;
-            // Use ordinal
-            if (pIlt->u1.Ordinal >> 63 == 1) {
-                DWORD dwOrdinal = pIlt->u1.Ordinal & 0xffff;
-                // std::cout << "  Ordinal_" << dwOrdinal << std::endl;
-                table[szDllName]["Ordinal_" + std::to_string(dwOrdinal)] = lpFunctionAddr;
-
-                pIlt++;
-                pIat++;
-                continue;
-            }
-
-            LPCSTR szFunctionName = ((PIMAGE_IMPORT_BY_NAME)(lpPe + pIlt->u1.AddressOfData - ipad))->Name;
-            // std::cout << "  " << szFunctionName << std::endl;
-
-            table[szDllName][szFunctionName] = lpFunctionAddr;
-
-            pIlt++;
-            pIat++;
-        }
-
-        pd++;
-    }
-
-    return table;
-}
-
 // Patch an IAT entry of a remote process
 // This can be implemented with ReadProcessMemory and offsetof
 // but it'd require huge refactoring effort
@@ -537,10 +527,7 @@ VOID PatchRemoteIatEntryByName(
     LPCSTR szTargetName,
     LPBYTE lpTramp)
 {
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    GetPeHeaders(lpBuf, 0, 0, 0, &pOptHeader, 0);
-
-    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpBuf, pOptHeader);
+    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpBuf);
 
     // Iterate through DLLs
     PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
@@ -603,10 +590,7 @@ VOID PatchRemoteIatEntryByName(
 //    DWORD  dwTargetHash,
 //    LPBYTE lpTramp)
 //{
-//    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-//    GetPeHeaders(lpImage, 0, 0, 0, &pOptHeader, 0);
-//
-//    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpImage, pOptHeader);
+//    PIMAGE_IMPORT_DESCRIPTOR pIdt = GetImportDirectoryTable(lpImage);
 //
 //    // Iterate through DLLs
 //    PIMAGE_IMPORT_DESCRIPTOR pd = pIdt;
@@ -698,20 +682,20 @@ ReadExportAddressTableFromFile(
     // We transform it to Base + RVA - lpad for simplicity
     // FIXME: We assume SectionAlignment was 0x1000 here
     LONG epad = 0x1000;
-    PIMAGE_SECTION_HEADER pEdataHeader = GetSectionHeaderPointerByName(aSecHeaders, ".edata");
+    PIMAGE_SECTION_HEADER pEdataHeader = GetSectionHeaderMaByName(aSecHeaders, ".edata");
     if (pEdataHeader) {
         epad = pEdataHeader->VirtualAddress - pEdataHeader->PointerToRawData;
     }
     else {
         // .edata sometimes overlaps with .rdata
         // We can apply .rdata's padding offset to .edata
-        PIMAGE_SECTION_HEADER pRdataHeader = GetSectionHeaderPointerByName(aSecHeaders, ".rdata");
+        PIMAGE_SECTION_HEADER pRdataHeader = GetSectionHeaderMaByName(aSecHeaders, ".rdata");
         epad = pRdataHeader->VirtualAddress - pRdataHeader->PointerToRawData;
     }
 
     // FIXME: We assume SectionAlignment was 0x1000 here
     LONG tpad = 0x1000;
-    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderPointerByName(aSecHeaders, ".text");
+    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderMaByName(aSecHeaders, ".text");
     if (pTextHeader) {
         tpad = pTextHeader->VirtualAddress - pTextHeader->PointerToRawData;
     }
@@ -733,14 +717,14 @@ ReadExportAddressTableFromFile(
     return mEAT;
 }
 
-LPBYTE GetFirstTextPtrFromFile(
+LPBYTE GetFirstTextMaFromFile(
     LPBYTE lpPe,
     PIMAGE_OPTIONAL_HEADER64 pOptHeader,
     PIMAGE_SECTION_HEADER aSecHeaders,
     LPDWORD length)
 {
     // Get .text section
-    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderPointerByName(aSecHeaders, ".text");
+    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderMaByName(aSecHeaders, ".text");
 
     if (!pTextHeader) {
         return NULL;
@@ -752,7 +736,7 @@ LPBYTE GetFirstTextPtrFromFile(
     return lpPe + pTextHeader->PointerToRawData;
 }
 
-LPBYTE GetFirstSectionPtrFromFile(
+LPBYTE GetFirstSectionMaFromFile(
     LPBYTE lpPe,
     LPCSTR lpSecName,
     PIMAGE_OPTIONAL_HEADER64 pOptHeader,
@@ -760,7 +744,7 @@ LPBYTE GetFirstSectionPtrFromFile(
     LPDWORD length)
 {
     // Get .text section
-    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderPointerByName(aSecHeaders, lpSecName);
+    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderMaByName(aSecHeaders, lpSecName);
 
     if (!pTextHeader) {
         return NULL;
