@@ -181,7 +181,7 @@ PIMAGE_SECTION_HEADER FindSectionHeaderMaByVa(LPBYTE lpPe, DWORD dwVa)
     GetPeHeaders(lpPe, NULL, NULL, NULL, NULL, &aSecHeaders);
 
     for (PIMAGE_SECTION_HEADER p = aSecHeaders; *(p->Name); p++) {
-        if (p->VirtualAddress <= dwVa and dwVa < p->VirtualAddress + p->SizeOfRawData) {
+        if (p->VirtualAddress <= dwVa and dwVa < p->VirtualAddress + p->Misc.VirtualSize) {
             return p;
         }
     }
@@ -207,14 +207,36 @@ PIMAGE_SECTION_HEADER FindSectionHeaderMaByRa(LPBYTE lpPe, DWORD dwRa)
 DWORD Va2Ra(LPBYTE lpPe, DWORD dwVa)
 {
     PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByVa(lpPe, dwVa);
+    if (not pHeader) return NULL;
     return pHeader->PointerToRawData + dwVa - pHeader->VirtualAddress;
+}
+
+// Convert virtual address to virtual memory address using ImageBase
+ULONGLONG Va2Vma(LPBYTE lpPe, DWORD dwVa)
+{
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
+    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, NULL);
+
+    return pOptHeader->ImageBase + dwVa;
 }
 
 // Convert raw address to relative virtual address
 DWORD Ra2Va(LPBYTE lpPe, DWORD dwRa)
 {
     PIMAGE_SECTION_HEADER pHeader = FindSectionHeaderMaByRa(lpPe, dwRa);
+    if (not pHeader) return NULL;
     return pHeader->VirtualAddress + dwRa - pHeader->PointerToRawData;
+}
+
+// Convert raw address to virtual memory address using ImageBase
+ULONGLONG Ra2Vma(LPBYTE lpPe, DWORD dwRa)
+{
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
+    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, NULL);
+
+    DWORD dwVa = Ra2Va(lpPe, dwRa);
+    if (not dwVa) return NULL;
+    return pOptHeader->ImageBase + Ra2Va(lpPe, dwRa);
 }
 
 PIMAGE_SECTION_HEADER GetAvailableSectionHeaderEntry(PIMAGE_SECTION_HEADER pSecHeaders) {
