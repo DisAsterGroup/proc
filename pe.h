@@ -195,7 +195,7 @@ PIMAGE_SECTION_HEADER GetSectionHeaderMaByName(PIMAGE_SECTION_HEADER pSecHeaders
  *
  * TODO: Handle the case where availble slots in section headers exhaust
  */
-DWORD AddSection(HANDLE  hPE      /* Handle to the heap */
+DWORD AddSection(HANDLE  hPe      /* Handle to the heap */
     , LPBYTE lpPe      /* Pointer to a PE file */
     , DWORD  cbPe
     , LPVOID lpSection
@@ -203,12 +203,12 @@ DWORD AddSection(HANDLE  hPE      /* Handle to the heap */
     , PCHAR pszSecName
     , DWORD  Character
 ) {
-    PIMAGE_DOS_HEADER        pDOSHeader;
-    PIMAGE_NT_HEADERS64      pNTHeaders;
+    PIMAGE_DOS_HEADER        pDosHeader;
+    PIMAGE_NT_HEADERS64      pNtHeaders;
     PIMAGE_FILE_HEADER       pFileHeader;
     PIMAGE_OPTIONAL_HEADER64 pOptHeader;
     PIMAGE_SECTION_HEADER    aSecHeaders;
-    GetPeHeaders(lpPe, &pDOSHeader, &pNTHeaders, &pFileHeader, &pOptHeader, &aSecHeaders);
+    GetPeHeaders(lpPe, &pDosHeader, &pNtHeaders, &pFileHeader, &pOptHeader, &aSecHeaders);
 
     pFileHeader->NumberOfSections++;
 
@@ -225,7 +225,7 @@ DWORD AddSection(HANDLE  hPE      /* Handle to the heap */
     pSecHeader->NumberOfLinenumbers = 0;
     pSecHeader->Characteristics = Character;
 
-    HeapReAlloc(hPE, HEAP_GENERATE_EXCEPTIONS | HEAP_REALLOC_IN_PLACE_ONLY | HEAP_ZERO_MEMORY, lpPe, cbPe + align(cbSection, pOptHeader->FileAlignment));
+    HeapReAlloc(hPe, HEAP_GENERATE_EXCEPTIONS | HEAP_REALLOC_IN_PLACE_ONLY | HEAP_ZERO_MEMORY, lpPe, cbPe + align(cbSection, pOptHeader->FileAlignment));
     WriteProcessMemory(GetCurrentProcess(), (LPVOID)((DWORDLONG)lpPe + cbPe), lpSection, cbPe + align(cbSection, pOptHeader->FileAlignment), 0);
 
     pOptHeader->NumberOfRvaAndSizes++;
