@@ -59,23 +59,23 @@ LPBYTE OpenReadFileA(LPCSTR lpFileName, PDWORD pdwFileSize) {
 }
 
 VOID GetPeHeaders(LPBYTE lpImage
-    , PIMAGE_DOS_HEADER* ppDOSHeader
-    , PIMAGE_NT_HEADERS64* ppNTHeaders
+    , PIMAGE_DOS_HEADER* ppDosHeader
+    , PIMAGE_NT_HEADERS64* ppNtHeaders
     , PIMAGE_FILE_HEADER* ppFileHeader
     , PIMAGE_OPTIONAL_HEADER64* ppOptHeader
     , PIMAGE_SECTION_HEADER* paSecHeaders
 ) {
-    PIMAGE_DOS_HEADER        pDOSHeader = (PIMAGE_DOS_HEADER)lpImage;
-    PIMAGE_NT_HEADERS64      pNTHeaders = (PIMAGE_NT_HEADERS64)(lpImage + pDOSHeader->e_lfanew);
-    PIMAGE_FILE_HEADER       pFileHeader = &pNTHeaders->FileHeader;
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader = &pNTHeaders->OptionalHeader;
+    PIMAGE_DOS_HEADER        pDosHeader  = (PIMAGE_DOS_HEADER)lpImage;
+    PIMAGE_NT_HEADERS64      pNtHeaders  = (PIMAGE_NT_HEADERS64)(lpImage + pDosHeader->e_lfanew);
+    PIMAGE_FILE_HEADER       pFileHeader = &pNtHeaders->FileHeader;
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader  = &pNtHeaders->OptionalHeader;
     // Note: section headers reside right after an optional header
     PIMAGE_SECTION_HEADER    aSecHeaders = (PIMAGE_SECTION_HEADER)((DWORDLONG)pOptHeader + pFileHeader->SizeOfOptionalHeader);
 
-    if (ppDOSHeader)  *ppDOSHeader = pDOSHeader;
-    if (ppNTHeaders)  *ppNTHeaders = pNTHeaders;
+    if (ppDosHeader)  *ppDosHeader  = pDosHeader;
+    if (ppNtHeaders)  *ppNtHeaders  = pNtHeaders;
     if (ppFileHeader) *ppFileHeader = pFileHeader;
-    if (ppOptHeader)  *ppOptHeader = pOptHeader;
+    if (ppOptHeader)  *ppOptHeader  = pOptHeader;
     if (paSecHeaders) *paSecHeaders = aSecHeaders;
 }
 
@@ -88,19 +88,17 @@ VOID GetRemotePeHeaders(
     PIMAGE_OPTIONAL_HEADER64* ppOptHeader,
     PIMAGE_SECTION_HEADER* paSecHeaders
 ) {
-    PIMAGE_DOS_HEADER        pDosHeader = (PIMAGE_DOS_HEADER)lpImage;
-
-    PIMAGE_NT_HEADERS64      pNtHeaders = (PIMAGE_NT_HEADERS64)(lpImage + pDosHeader->e_lfanew);
-
+    PIMAGE_DOS_HEADER        pDosHeader  = (PIMAGE_DOS_HEADER)lpImage;
+    PIMAGE_NT_HEADERS64      pNtHeaders  = (PIMAGE_NT_HEADERS64)(lpImage + pDosHeader->e_lfanew);
     PIMAGE_FILE_HEADER       pFileHeader = (PIMAGE_FILE_HEADER)((LPBYTE)pNtHeaders + offsetof(IMAGE_NT_HEADERS64, FileHeader));
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader = &pNtHeaders->OptionalHeader;
+    PIMAGE_OPTIONAL_HEADER64 pOptHeader  = &pNtHeaders->OptionalHeader;
     // Note: section headers reside right after an optional header
     PIMAGE_SECTION_HEADER    aSecHeaders = (PIMAGE_SECTION_HEADER)((DWORDLONG)pOptHeader + pFileHeader->SizeOfOptionalHeader);
 
-    if (ppDosHeader)  *ppDosHeader = pDosHeader;
-    if (ppNtHeaders)  *ppNtHeaders = pNtHeaders;
+    if (ppDosHeader)  *ppDosHeader  = pDosHeader;
+    if (ppNtHeaders)  *ppNtHeaders  = pNtHeaders;
     if (ppFileHeader) *ppFileHeader = pFileHeader;
-    if (ppOptHeader)  *ppOptHeader = pOptHeader;
+    if (ppOptHeader)  *ppOptHeader  = pOptHeader;
     if (paSecHeaders) *paSecHeaders = aSecHeaders;
 }
 
