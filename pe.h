@@ -609,68 +609,57 @@ VOID PatchRemoteIatEntryByName(
 //    }
 //}
 
-
-
-PIMAGE_EXPORT_DIRECTORY GetExportDirectoryTable(LPBYTE lpPe, PIMAGE_OPTIONAL_HEADER64 pOptHeader, LONG lpad = 0) {
-    PIMAGE_EXPORT_DIRECTORY pEDT = (PIMAGE_EXPORT_DIRECTORY)(lpPe + pOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress - lpad);
-    return pEDT;
-}
-
-std::map</* name */ std::string, /* address */ LPBYTE>
+std::map</* name */ std::string, /* address */ ULONGLONG>
 ReadExportAddressTableFromFile(
     LPBYTE lpPe
 ) {
-    // Read these headers
-    PIMAGE_OPTIONAL_HEADER64 pOptHeader;
-    PIMAGE_SECTION_HEADER aSecHeaders;
-    GetPeHeaders(lpPe, NULL, NULL, NULL, &pOptHeader, &aSecHeaders);
-
-    // Base -----------
-    // 
-    // .edata raw -----
-    // 
-    // .edata virt ----
-    // 
-    // The RVA is an address after the relocation
-    // When we want to spot an RVA in a file without the relocation, we need to 'derelocate' it first.
-    // 
-    // The calculation is Base + RVA - (VirtualAddress - PointerToRawData)
-    // We transform it to Base + RVA - lpad for simplicity
-    // FIXME: We assume SectionAlignment was 0x1000 here
-    LONG epad = 0x1000;
-    PIMAGE_SECTION_HEADER pEdataHeader = GetSectionHeaderMaByName(aSecHeaders, ".edata");
-    if (pEdataHeader) {
-        epad = pEdataHeader->VirtualAddress - pEdataHeader->PointerToRawData;
-    }
-    else {
-        // .edata sometimes overlaps with .rdata
-        // We can apply .rdata's padding offset to .edata
-        PIMAGE_SECTION_HEADER pRdataHeader = GetSectionHeaderMaByName(aSecHeaders, ".rdata");
-        epad = pRdataHeader->VirtualAddress - pRdataHeader->PointerToRawData;
+    DWORD dwExportDir = GetDataDirectoryRa(lpPe, IMAGE_DIRECTORY_ENTRY_EXPORT);
+    if (dwExportDir == NULL) {
+        return std::map</* name */ std::string, /* address */ ULONGLONG>();
     }
 
-    // FIXME: We assume SectionAlignment was 0x1000 here
-    LONG tpad = 0x1000;
-    PIMAGE_SECTION_HEADER pTextHeader = GetSectionHeaderMaByName(aSecHeaders, ".text");
-    if (pTextHeader) {
-        tpad = pTextHeader->VirtualAddress - pTextHeader->PointerToRawData;
-    }
+    PIMAGE_EXPORT_DIRECTORY pEdt = (PIMAGE_EXPORT_DIRECTORY)(lpPe + dwExportDir);
 
-    PIMAGE_EXPORT_DIRECTORY pEDT = GetExportDirectoryTable(lpPe, pOptHeader, epad);
-    std::cout << "[ReadExportAddressTable] Reading EAT of " << lpPe + pEDT->Name - epad
-        << " (" << pEDT->NumberOfFunctions << " functions exported)" << std::endl;
-
-    std::map<std::string, LPBYTE> mEAT;
+    std::map</* name */ std::string, /* address */ ULONGLONG> table;
 
     // https://ferreirasc.github.io/PE-Export-Address-Table/
     // NOTE: This can miss functions without names
-    for (DWORD i = 0; i < pEDT->NumberOfNames; i++) {
-        WORD j = *(WORD*)(lpPe + pEDT->AddressOfNameOrdinals + i * 2 - epad);
-        LPCSTR szName = (LPCSTR)lpPe + *(DWORD*)(lpPe + pEDT->AddressOfNames + i * 4 - epad) - epad;
-        mEAT[szName] = lpPe + *(DWORD*)(lpPe + pEDT->AddressOfFunctions + j * 4 - epad) - tpad;
+    for (DWORD i = 0; i < pEdt->NumberOfNames; i++) {
+        DWORD dwAddressOfNameOrdinalsRa = Va2Ra(lpPe, pEdt->AddressOfNameOrdinals);
+        WORD ordinal = *(WORD*)(lpPe + dwAddressOfNameOrdinalsRa + i * 2);
+
+        DWORD dwAddressOfNamesRa = Va2Ra(lpPe, pEdt->AddressOfNames);
+        LPCSTR szName = (LPCSTR)lpPe + *(DWORD*)(lpPe + dwAddressOfNamesRa + i * 4);
+
+        DWORD dwAddressOfFunctionsRa = Va2Ra(lpPe, pEdt->AddressOfFunctions);
+        table[szName] = *(DWORD*)(lpPe + dwAddressOfFunctionsRa + ordinal * 4);
     }
 
-    return mEAT;
+    return table;
+}
+
+std::map</* name */ std::string, /* address */ ULONGLONG>
+ReadExportAddressTableFromProc(
+    LPBYTE lpBuf
+) {
+    DWORD dwExportDir = GetDataDirectoryVa(lpBuf, IMAGE_DIRECTORY_ENTRY_EXPORT);
+    if (dwExportDir == NULL) {
+        return std::map</* name */ std::string, /* address */ ULONGLONG>();
+    }
+
+    PIMAGE_EXPORT_DIRECTORY pEdt = (PIMAGE_EXPORT_DIRECTORY)(lpBuf + dwExportDir);
+
+    std::map</* name */ std::string, /* address */ ULONGLONG> table;
+
+    // https://ferreirasc.github.io/PE-Export-Address-Table/
+    // NOTE: This can miss functions without names
+    for (DWORD i = 0; i < pEdt->NumberOfNames; i++) {
+        WORD ordinal = *(WORD*)(lpBuf + pEdt->AddressOfNameOrdinals + i * 2);
+        LPCSTR szName = (LPCSTR)lpBuf + *(DWORD*)(lpBuf + pEdt->AddressOfNames + i * 4);
+        table[szName] = *(DWORD*)(lpBuf + pEdt->AddressOfFunctions + ordinal * 4);
+    }
+
+    return table;
 }
 
 LPBYTE GetFirstTextMaFromFile(
