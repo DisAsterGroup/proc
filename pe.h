@@ -629,7 +629,8 @@ ReadExportAddressTableFromFile(
         WORD ordinal = *(WORD*)(lpPe + dwAddressOfNameOrdinalsRa + i * 2);
 
         DWORD dwAddressOfNamesRa = Va2Ra(lpPe, pEdt->AddressOfNames);
-        LPCSTR szName = (LPCSTR)lpPe + *(DWORD*)(lpPe + dwAddressOfNamesRa + i * 4);
+        DWORD dwNameRa = Va2Ra(lpPe, *(DWORD*)(lpPe + dwAddressOfNamesRa + i * 4));
+        LPCSTR szName = (LPCSTR)(lpPe + dwNameRa);
 
         DWORD dwAddressOfFunctionsRa = Va2Ra(lpPe, pEdt->AddressOfFunctions);
         table[szName] = *(DWORD*)(lpPe + dwAddressOfFunctionsRa + ordinal * 4);
@@ -654,7 +655,7 @@ ReadExportAddressTableFromProc(
     // https://ferreirasc.github.io/PE-Export-Address-Table/
     // NOTE: This can miss functions without names
     for (DWORD i = 0; i < pEdt->NumberOfNames; i++) {
-        WORD ordinal = *(WORD*)(lpBuf + pEdt->AddressOfNameOrdinals + i * 2);
+        WORD ordinal  = *(WORD*)(lpBuf + pEdt->AddressOfNameOrdinals + i * 2);
         LPCSTR szName = (LPCSTR)lpBuf + *(DWORD*)(lpBuf + pEdt->AddressOfNames + i * 4);
         table[szName] = *(DWORD*)(lpBuf + pEdt->AddressOfFunctions + ordinal * 4);
     }
