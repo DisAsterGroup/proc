@@ -81,13 +81,17 @@ VOID GetPeHeaders(LPBYTE lpImage
 
 VOID GetRemotePeHeaders(
     HANDLE hProcess,
-    LPBYTE lpImage,
+    LPBYTE lpBase,
     PIMAGE_DOS_HEADER* ppDosHeader,
     PIMAGE_NT_HEADERS64* ppNtHeaders,
     PIMAGE_FILE_HEADER* ppFileHeader,
     PIMAGE_OPTIONAL_HEADER64* ppOptHeader,
     PIMAGE_SECTION_HEADER* paSecHeaders
 ) {
+    // Copy the contents of the image partially
+    LPBYTE lpImage = (LPBYTE)malloc(1024);
+    ReadProcessMemory(hProcess, lpBase, lpImage, 1024, 0);
+
     PIMAGE_DOS_HEADER        pDosHeader  = (PIMAGE_DOS_HEADER)lpImage;
     PIMAGE_NT_HEADERS64      pNtHeaders  = (PIMAGE_NT_HEADERS64)(lpImage + pDosHeader->e_lfanew);
     PIMAGE_FILE_HEADER       pFileHeader = (PIMAGE_FILE_HEADER)((LPBYTE)pNtHeaders + offsetof(IMAGE_NT_HEADERS64, FileHeader));

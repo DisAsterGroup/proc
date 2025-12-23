@@ -81,13 +81,17 @@ VOID GetPeHeaders(LPBYTE lpImage
 
 VOID GetRemotePeHeaders(
     HANDLE hProcess,
-    LPBYTE lpImage,
+    LPBYTE lpBase,
     PIMAGE_DOS_HEADER* ppDosHeader,
     PIMAGE_NT_HEADERS32* ppNtHeaders,
     PIMAGE_FILE_HEADER* ppFileHeader,
     PIMAGE_OPTIONAL_HEADER32* ppOptHeader,
     PIMAGE_SECTION_HEADER* paSecHeaders
 ) {
+    // Copy the contents of the image partially
+    LPBYTE lpImage = (LPBYTE)malloc(1024);
+    ReadProcessMemory(hProcess, lpBase, lpImage, 1024, 0);
+
     PIMAGE_DOS_HEADER        pDosHeader  = (PIMAGE_DOS_HEADER)lpImage;
     PIMAGE_NT_HEADERS32      pNtHeaders  = (PIMAGE_NT_HEADERS32)(lpImage + pDosHeader->e_lfanew);
     PIMAGE_FILE_HEADER       pFileHeader = (PIMAGE_FILE_HEADER)((LPBYTE)pNtHeaders + offsetof(IMAGE_NT_HEADERS32, FileHeader));
@@ -412,7 +416,7 @@ ReadImportLookupTableFromProc(
  * As this offset is common with IAT and ILT, we can successfully correlate
  * a function name and its address
  */
-std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>
+std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ DWORD>>
 ReadRemoteImportAddressTable(
     /* HANDLE hProcess, LPBYTE lpProc */
     LPBYTE lpBuf
@@ -421,14 +425,14 @@ ReadRemoteImportAddressTable(
 
     DWORD dwImportDir = GetDataDirectoryVa(lpBuf, IMAGE_DIRECTORY_ENTRY_IMPORT);
     if (dwImportDir == NULL) {
-        return std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>>();
+        return std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ DWORD>>();
     }
 
     PIMAGE_IMPORT_DESCRIPTOR pIdt = (PIMAGE_IMPORT_DESCRIPTOR)(lpBuf + dwImportDir);
     PIMAGE_IMPORT_DESCRIPTOR pd   = pIdt;
 
     // Result
-    std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ ULONGLONG>> table;
+    std::map</* DLL name */ std::string, std::map</* name */ std::string, /* address */ DWORD>> table;
 
     // Iterate through DLLs
     while (pd->OriginalFirstThunk) {
@@ -439,7 +443,7 @@ ReadRemoteImportAddressTable(
 
         // Iterate through functions
         while (pIlt->u1.AddressOfData and pIat->u1.AddressOfData) {
-            ULONGLONG lpFunctionAddr = pIat->u1.AddressOfData;
+            DWORD lpFunctionAddr = pIat->u1.AddressOfData;
 
             LPSTR szFunctionName;
 
@@ -631,18 +635,18 @@ ReadExportAddressTableFromFile(
     return table;
 }
 
-std::map</* name */ std::string, /* address */ ULONGLONG>
+std::map</* name */ std::string, /* address */ DWORD>
 ReadExportAddressTableFromProc(
     LPBYTE lpBuf
 ) {
     DWORD dwExportDir = GetDataDirectoryVa(lpBuf, IMAGE_DIRECTORY_ENTRY_EXPORT);
     if (dwExportDir == NULL) {
-        return std::map</* name */ std::string, /* address */ ULONGLONG>();
+        return std::map</* name */ std::string, /* address */ DWORD>();
     }
 
     PIMAGE_EXPORT_DIRECTORY pEdt = (PIMAGE_EXPORT_DIRECTORY)(lpBuf + dwExportDir);
 
-    std::map</* name */ std::string, /* address */ ULONGLONG> table;
+    std::map</* name */ std::string, /* address */ DWORD> table;
 
     // https://ferreirasc.github.io/PE-Export-Address-Table/
     // NOTE: This can miss functions without names
