@@ -457,9 +457,9 @@ ReadRemoteImportAddressTable(
             // Ordinal
             if (pIlt->u1.Ordinal >> 63 == 1) {
                 DWORD dwOrdinal = pIlt->u1.Ordinal & 0xffff;
-                szFunctionName = (LPSTR)VirtualAlloc(NULL, 10, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-                strcpy_s(szFunctionName, 8, "Ordinal_");
-                sprintf_s(szFunctionName, 10, "%u", dwOrdinal);
+                szFunctionName = (LPSTR)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+                strcpy_s(szFunctionName, 16, "Ordinal_");
+                sprintf_s(szFunctionName + 8, 8, "%u", dwOrdinal);
             }
             else {
                 szFunctionName = ((PIMAGE_IMPORT_BY_NAME)(lpBuf + pIlt->u1.AddressOfData))->Name;
