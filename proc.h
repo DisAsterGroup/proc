@@ -66,3 +66,20 @@ PPEB GetRemotePeb(HANDLE hProcess)
 
     return pBasicInfo->PebBaseAddress;
 }
+
+BOOL KillProc(DWORD dwPid)
+{
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, dwPid);
+    if (!hProcess) {
+        printf("[KillProc] OpenProcess failed: %lu\n", GetLastError());
+        return false;
+    }
+
+    BOOL ok = TerminateProcess(hProcess, 1);
+    if (!ok) {
+        printf("[KillProc] TerminateProcess failed: %lu\n", GetLastError());
+    }
+
+    CloseHandle(hProcess);
+    return ok;
+}
