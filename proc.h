@@ -58,13 +58,65 @@ PPEB GetRemotePeb(HANDLE hProcess)
         PVOID ProcessInformation,
         DWORD ProcessInformationLength,
         PDWORD ReturnLength
-        );
+    );
 
     _NtQueryInformationProcess ntQueryInformationProcess = (_NtQueryInformationProcess)fpNtQueryInformationProcess;
 
     ntQueryInformationProcess(hProcess, ProcessBasicInformation, pBasicInfo, sizeof(PROCESS_BASIC_INFORMATION), &dwReturnLength);
 
     return pBasicInfo->PebBaseAddress;
+}
+
+typedef struct _THREAD_BASIC_INFORMATION {
+    NTSTATUS ExitStatus;
+    PVOID TebBaseAddress;
+    CLIENT_ID ClientId;
+    ULONG_PTR AffinityMask;
+    LONG Priority;
+    LONG BasePriority;
+};
+
+struct THREAD_BASIC_INFORMATION {
+    NTSTATUS ExitStatus;
+    TEB* Teb;
+    CLIENT_ID ClientId;
+    KAFFINITY AffinityMask;
+    LONG Priority;
+    LONG BasePriority;
+};
+
+PTEB GetRemoteTeb(HANDLE hProcess, HANDLE hThread)
+{
+    HMODULE hNTDLL = LoadLibraryA("ntdll");
+
+    if (!hNTDLL)
+        return 0;
+
+    FARPROC fpNtQueryInformationThread = GetProcAddress(hNTDLL, "NtQueryInformationThread");
+
+    if (!fpNtQueryInformationThread)
+        return 0;
+
+    typedef NTSTATUS(WINAPI* _NtQueryInformationThread)(
+        HANDLE          ThreadHandle,
+        THREADINFOCLASS ThreadInformationClass,
+        PVOID           ThreadInformation,
+        ULONG           ThreadInformationLength,
+        PULONG          ReturnLength
+    );
+
+    _NtQueryInformationThread ntQueryInformationThread = (_NtQueryInformationThread)fpNtQueryInformationThread;
+
+    THREAD_BASIC_INFORMATION* tbi = new THREAD_BASIC_INFORMATION();
+    ntQueryInformationThread(
+        hThread,
+        (THREADINFOCLASS)0, /* ThreadBasicInformation */
+        tbi,
+        sizeof(THREAD_BASIC_INFORMATION),
+        nullptr
+    );
+
+    return tbi->Teb;
 }
 
 BOOL KillProc(DWORD dwPid)
