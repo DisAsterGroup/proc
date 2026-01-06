@@ -135,3 +135,24 @@ BOOL KillProc(DWORD dwPid)
     CloseHandle(hProcess);
     return ok;
 }
+
+NTSTATUS NtSuspendProcess(HANDLE hProcess)
+{
+    HMODULE hNTDLL = LoadLibraryA("ntdll");
+
+    if (!hNTDLL)
+        return -1;
+
+    FARPROC fpNtSuspendProcess = GetProcAddress(hNTDLL, "NtSuspendProcess");
+
+    if (!fpNtSuspendProcess)
+        return -1;
+
+    typedef NTSTATUS(NTAPI* _NtSuspendProcess)(
+        HANDLE          ProcessHandle
+    );
+
+    _NtSuspendProcess ntSuspendProcess = (_NtSuspendProcess)fpNtSuspendProcess;
+
+    return ntSuspendProcess(hProcess);
+}
